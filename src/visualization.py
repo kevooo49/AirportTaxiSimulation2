@@ -38,11 +38,11 @@ class AirportVisualization:
         
     def setup_plot(self):
         """Konfiguracja wykresu"""
-        # Obrócone ustawienia dla siatki 69x36 (szerokość x wysokość)
+        # Obrócone ustawienia dla siatki 70x36 (szerokość x wysokość)
         self.ax.set_xlim(-2, 71)  # Szerokość siatki + marginesy (obrócone)
         self.ax.set_ylim(-2, 38)  # Wysokość siatki + marginesy (obrócone)
         self.ax.set_aspect('equal')
-        self.ax.set_title('Symulacja Lotniska Balice - Siatka 69x36', fontsize=16, fontweight='bold')
+        self.ax.set_title('Symulacja Lotniska Balice - Siatka 70x36', fontsize=16, fontweight='bold')
         self.ax.set_xlabel('Pozycja X (siatka)', fontsize=12)
         self.ax.set_ylabel('Pozycja Y (siatka)', fontsize=12)
         
@@ -52,19 +52,20 @@ class AirportVisualization:
         # Rysowanie grafu lotniska
         self.draw_airport_graph()
         
-        # Legenda - zaktualizowana dla siatki
+        # Legenda - zaktualizowana dla nowych stanów
         legend_elements = [
             mpatches.Patch(color='blue', label='Oczekujące na lądowanie'),
             mpatches.Patch(color='red', label='Lądujące'),
-            mpatches.Patch(color='green', label='Wylądowane'),
-            mpatches.Patch(color='orange', label='Taxi do bramki'),
+            mpatches.Patch(color='orange', label='Taxi do stanowiska'),
+            mpatches.Patch(color='green', label='Na stanowisku'),
+            mpatches.Patch(color='yellow', label='Taxi do pasa'),
+            mpatches.Patch(color='purple', label='Oczekujące na start'),
+            mpatches.Patch(color='magenta', label='Startujące'),
             mpatches.Patch(color='#2c2c2c', label='Pas startowy'),
             mpatches.Patch(color='#32CD32', label='Stanowiska'),
-            mpatches.Patch(color='#4169E1', label='Apron'),
-            mpatches.Patch(color='#808080', label='Taxiway'),
-            mpatches.Patch(color='#FF8C00', label='Łączniki')
+            mpatches.Patch(color='#4169E1', label='Apron')
         ]
-        self.ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1, 1))
+        #self.ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, 1))
         
         # Siatka pomocnicza dla lepszej orientacji
         self.ax.grid(True, alpha=0.3, linewidth=0.5)
@@ -156,6 +157,9 @@ class AirportVisualization:
                           edgecolors='black', linewidth=1, alpha=0.8, zorder=2)
             
             # Etykiety węzłów - mniejsze dla siatki
+            self.ax.annotate(f'{node_id}', (x, y), 
+                           xytext=(0, -20), textcoords='offset points',
+                           fontsize=8, fontweight='bold', ha='center', zorder=6)
             
     def render(self):
         """Renderowanie aktualnego stanu symulacji"""
@@ -166,55 +170,89 @@ class AirportVisualization:
         self.draw_background()
         
         # Rysowanie samolotów
+        waiting_offset = 0  # Offset dla samolotów oczekujących w powietrzu
         for airplane in self.model.airplanes:
-            if hasattr(airplane, 'get_position'):
-                x, y = airplane.get_position()
-            elif hasattr(airplane, 'current_node') and airplane.current_node:
-                pos = self.model.graph.get_node_position(airplane.current_node)
-                if pos:
-                    x, y = pos
-                else:
-                    continue
+            # Jeśli samolot oczekuje na lądowanie i nie ma pozycji, pokaż go "w powietrzu"
+            if airplane.state == "waiting_landing" and airplane.current_node is None:
+                x = -1
+                y = 30 - waiting_offset
+                waiting_offset += 2
             else:
-                continue
+                # Użyj interpolowanej pozycji
+                x, y = airplane.get_position()
                 
             color = airplane.get_color()
-            size = 80 if airplane.state == "landing" else 60  # Mniejsze samoloty dla siatki
+            size = 80 if airplane.state == "landing" else 60
             
             # Różne kształty dla różnych stanów
-            if airplane.state == "waiting":
+            if airplane.state == "waiting_landing":
                 marker = '^'  # Trójkąt
             elif airplane.state == "landing":
-                marker = 'o'  # Koło
-            elif airplane.state == "landed":
-                marker = 'D'  # Diament
-            else:  # taxiing
+                marker = 'v'  # Trójkąt w dół
+            elif airplane.state == "taxiing_to_stand":
                 marker = 's'  # Kwadrat
+            elif airplane.state == "at_stand":
+                marker = 'o'  # Koło
+            elif airplane.state == "taxiing_to_runway":
+                marker = 's'  # Kwadrat
+            elif airplane.state == "waiting_departure":
+                marker = 'D'  # Diament
+            elif airplane.state == "departing":
+                marker = '^'  # Trójkąt
+            else:
+                marker = 'o'  # Koło
+            
+            # Jeśli samolot się porusza, pokaż ślad ruchu
+            if hasattr(airplane, 'is_moving') and airplane.is_moving:
+                # Rysuj linię pokazującą kierunek ruchu
+                if airplane.position.current_node and airplane.position.target_node:
+                    start_pos = self.model.graph.get_node_position(airplane.position.current_node)
+                    end_pos = self.model.graph.get_node_position(airplane.position.target_node)
+                    if start_pos and end_pos:
+                        self.ax.plot([start_pos[0], end_pos[0]], [start_pos[1], end_pos[1]], 
+                                   color=color, alpha=0.3, linewidth=2, linestyle='--', zorder=3)
+                
+                # Zmniejsz przezroczystość podczas ruchu
+                alpha = 0.7
+            else:
+                alpha = 0.9
             
             self.ax.scatter(x, y, c=color, s=size, marker=marker, 
-                          edgecolors='black', linewidth=2, alpha=0.9, zorder=5)
+                          edgecolors='black', linewidth=2, alpha=alpha, zorder=5)
             
-            # Etykieta z ID samolotu - mniejsza dla siatki
+            # Etykieta z ID samolotu
             self.ax.annotate(f'A{airplane.unique_id}', (x, y), 
                            xytext=(0, -20), textcoords='offset points',
                            fontsize=8, fontweight='bold', ha='center', zorder=6)
         
         # Informacje o stanie
-        info_text = f"Krok: {len(self.model.airplanes) if hasattr(self.model, 'airplanes') else 0}\n"
-        waiting = len([a for a in self.model.airplanes if a.state == 'waiting'])
-        landing = len([a for a in self.model.airplanes if a.state == 'landing'])
-        landed = len([a for a in self.model.airplanes if a.state == 'landed'])
-        taxiing = len([a for a in self.model.airplanes if a.state == 'taxiing'])
-        info_text += f"Oczekujące: {waiting}\n"
-        info_text += f"Lądujące: {landing}\n"
-        info_text += f"Wylądowane: {landed}\n"
-        info_text += f"Taxi: {taxiing}\n"
-        info_text += f"Pas zajęty: {'TAK' if self.model.runway_controller.is_busy else 'NIE'}\n"
-        info_text += f"Kolejka: {self.model.runway_controller.get_queue_length()}"
+        info_text = f"Krok: {self.model.step_count}\n"
+        info_text += f"Wiatr: RWY {self.model.wind_direction}\n"
+        info_text += f"Aktywny pas: {self.model.runway_controller.active_runway}\n"
+        info_text += f"Samolotów: {len(self.model.airplanes)}\n\n"
         
-        self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
-                    fontsize=10, verticalalignment='top',
-                    bbox=dict(boxstyle="round,pad=0.5", facecolor='lightblue', alpha=0.9), zorder=10)
+        waiting_landing = len([a for a in self.model.airplanes if a.state == 'waiting_landing'])
+        landing = len([a for a in self.model.airplanes if a.state == 'landing'])
+        taxi_to_stand = len([a for a in self.model.airplanes if a.state == 'taxiing_to_stand'])
+        at_stand = len([a for a in self.model.airplanes if a.state == 'at_stand'])
+        taxi_to_rwy = len([a for a in self.model.airplanes if a.state == 'taxiing_to_runway'])
+        waiting_dep = len([a for a in self.model.airplanes if a.state == 'waiting_departure'])
+        departing = len([a for a in self.model.airplanes if a.state == 'departing'])
+        
+        info_text += f"Oczek. na lądow.: {waiting_landing}\n"
+        info_text += f"Lądujące: {landing}\n"
+        info_text += f"Taxi→stanowisko: {taxi_to_stand}\n"
+        info_text += f"Na stanowisku: {at_stand}\n"
+        info_text += f"Taxi→pas: {taxi_to_rwy}\n"
+        info_text += f"Oczek. na start: {waiting_dep}\n"
+        info_text += f"Startujące: {departing}\n\n"
+        info_text += f"Pas: {'ZAJĘTY' if self.model.runway_controller.is_busy else 'WOLNY'}\n"
+        info_text += f"Kolejka lądow.: {self.model.runway_controller.get_landing_queue_length()}\n"
+        info_text += f"Kolejka startów: {self.model.runway_controller.get_departure_queue_length()}"
+        
+        #self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
+        #            fontsize=10, verticalalignment='bottom',
+        #            bbox=dict(boxstyle="round,pad=0.5", facecolor='lightblue', alpha=0.9), zorder=10)
         
         plt.tight_layout()
     

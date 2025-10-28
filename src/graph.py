@@ -87,6 +87,16 @@ class AirportGraph:
         except nx.NetworkXNoPath:
             return []
     
+    def find_all_paths(self, start: int, end: int, max_length: int = 10) -> List[List[int]]:
+        """Znajduje wszystkie ścieżki między dwoma węzłami (ograniczone długością)"""
+        try:
+            paths = list(nx.all_simple_paths(self.graph, start, end, cutoff=max_length))
+            # Sortuj według długości
+            paths.sort(key=len)
+            return paths
+        except nx.NetworkXNoPath:
+            return []
+    
     def get_edge_length(self, from_node: int, to_node: int) -> float:
         """Pobiera długość krawędzi między węzłami"""
         if self.graph.has_edge(from_node, to_node):

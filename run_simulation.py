@@ -18,31 +18,39 @@ def main():
     print("=" * 50)
     
     # Parametry symulacji
-    num_airplanes = 8
+    num_arriving_airplanes = 20  # Początkowa liczba samolotów przybywających
+    wind_direction = "07"  # Kierunek wiatru: "07" lub "25"
+    arrival_rate = 0.1  # Prawdopodobieństwo pojawienia się nowego samolotu
     
     print(f"Parametry symulacji:")
     print(f"- Mapa: Graf lotniska (nodes.csv, edges.csv)")
-    print(f"- Liczba samolotów: {num_airplanes}")
+    print(f"- Początkowa liczba przybywających: {num_arriving_airplanes}")
+    print(f"- Kierunek wiatru: RWY {wind_direction}")
+    print(f"- Częstotliwość przylotów: {arrival_rate}")
     print()
     
     # Tworzenie modelu
-    model = AirportModel(num_airplanes=num_airplanes)
+    model = AirportModel(
+        num_arriving_airplanes=num_arriving_airplanes,
+        wind_direction=wind_direction,
+        arrival_rate=arrival_rate
+    )
     
     # Tworzenie wizualizacji
     viz = AirportVisualization(model)
-    
+
     print("Wybierz tryb uruchomienia:")
     print("1. Animacja interaktywna")
     print("2. Statyczny obraz")
     print("3. Zapisz animację do pliku")
     print("4. Uruchom pełną symulację i pokaż statystyki")
     
-    choice = input("Twój wybór (1-4): ").strip()
-    
+    choice = "1"
+
     if choice == "1":
         print("Uruchamianie animacji interaktywnej...")
         print("Zamknij okno aby zakończyć.")
-        anim = viz.animate(frames=200, interval=500)
+        anim = viz.animate(frames=1000, interval=100)
         plt.show()
         
     elif choice == "2":
@@ -67,26 +75,39 @@ def main():
             step_count += 1
             
             if step_count % 10 == 0:
-                waiting = len([a for a in model.airplanes if a.state == 'waiting'])
+                waiting_landing = len([a for a in model.airplanes if a.state == 'waiting_landing'])
                 landing = len([a for a in model.airplanes if a.state == 'landing'])
-                landed = len([a for a in model.airplanes if a.state == 'landed'])
-                taxiing = len([a for a in model.airplanes if a.state == 'taxiing'])
-                print(f"Krok {step_count}: Oczekujące: {waiting}, Lądujące: {landing}, Wylądowane: {landed}, Taxi: {taxiing}")
+                at_stand = len([a for a in model.airplanes if a.state == 'at_stand'])
+                waiting_dep = len([a for a in model.airplanes if a.state == 'waiting_departure'])
+                departing = len([a for a in model.airplanes if a.state == 'departing'])
+                print(f"Krok {step_count}: Samolotów: {len(model.airplanes)} | "
+                      f"Oczek.lądow: {waiting_landing}, Lądujące: {landing}, Na stan.: {at_stand}, "
+                      f"Oczek.start: {waiting_dep}, Startujące: {departing}")
         
         print(f"\nSymulacja zakończona po {step_count} krokach.")
         
         # Pokazanie końcowych statystyk
         print("Końcowe statystyki:")
-        waiting = len([a for a in model.airplanes if a.state == 'waiting'])
+        waiting_landing = len([a for a in model.airplanes if a.state == 'waiting_landing'])
         landing = len([a for a in model.airplanes if a.state == 'landing'])
-        landed = len([a for a in model.airplanes if a.state == 'landed'])
-        taxiing = len([a for a in model.airplanes if a.state == 'taxiing'])
-        print(f"- Samoloty oczekujące: {waiting}")
+        taxi_to_stand = len([a for a in model.airplanes if a.state == 'taxiing_to_stand'])
+        at_stand = len([a for a in model.airplanes if a.state == 'at_stand'])
+        taxi_to_rwy = len([a for a in model.airplanes if a.state == 'taxiing_to_runway'])
+        waiting_dep = len([a for a in model.airplanes if a.state == 'waiting_departure'])
+        departing = len([a for a in model.airplanes if a.state == 'departing'])
+        
+        print(f"- Kierunek wiatru: RWY {model.wind_direction}")
+        print(f"- Aktywny pas: {model.runway_controller.active_runway}")
+        print(f"- Samoloty oczekujące na lądowanie: {waiting_landing}")
         print(f"- Samoloty lądujące: {landing}")
-        print(f"- Samoloty wylądowane: {landed}")
-        print(f"- Samoloty w taxi: {taxiing}")
+        print(f"- Samoloty taxi do stanowiska: {taxi_to_stand}")
+        print(f"- Samoloty na stanowisku: {at_stand}")
+        print(f"- Samoloty taxi do pasa: {taxi_to_rwy}")
+        print(f"- Samoloty oczekujące na start: {waiting_dep}")
+        print(f"- Samoloty startujące: {departing}")
         print(f"- Pas zajęty: {'TAK' if model.runway_controller.is_busy else 'NIE'}")
-        print(f"- Długość kolejki: {model.runway_controller.get_queue_length()}")
+        print(f"- Kolejka lądowań: {model.runway_controller.get_landing_queue_length()}")
+        print(f"- Kolejka startów: {model.runway_controller.get_departure_queue_length()}")
         
         # Pokazanie końcowego stanu
         print("Pokazywanie końcowego stanu...")
@@ -94,7 +115,7 @@ def main():
         
     else:
         print("Nieprawidłowy wybór. Uruchamianie domyślnej animacji...")
-        anim = viz.animate(frames=100, interval=500)
+        anim = viz.animate(frames=100, interval=100)
         plt.show()
     
     print("\n✅ Symulacja zakończona!")
@@ -105,20 +126,22 @@ def demo_quick():
     print("🚀 Szybka demonstracja symulacji lotniska Balice...")
     
     # Tworzenie modelu
-    model = AirportModel(num_airplanes=5)
+    model = AirportModel(num_arriving_airplanes=3, wind_direction="07", arrival_rate=0.15)
     
     # Tworzenie wizualizacji
     viz = AirportVisualization(model)
     
     # Uruchomienie kilku kroków
-    print("Uruchamianie 20 kroków symulacji...")
-    for i in range(20):
+    print("Uruchamianie 30 kroków symulacji...")
+    for i in range(30):
         model.step()
-        waiting = len([a for a in model.airplanes if a.state == 'waiting'])
+        waiting_landing = len([a for a in model.airplanes if a.state == 'waiting_landing'])
         landing = len([a for a in model.airplanes if a.state == 'landing'])
-        landed = len([a for a in model.airplanes if a.state == 'landed'])
-        taxiing = len([a for a in model.airplanes if a.state == 'taxiing'])
-        print(f"Krok {i+1}: Oczekujące: {waiting}, Lądujące: {landing}, Wylądowane: {landed}, Taxi: {taxiing}")
+        at_stand = len([a for a in model.airplanes if a.state == 'at_stand'])
+        waiting_dep = len([a for a in model.airplanes if a.state == 'waiting_departure'])
+        print(f"Krok {i+1}: Samolotów: {len(model.airplanes)} | "
+              f"Oczek.lądow: {waiting_landing}, Lądujące: {landing}, "
+              f"Na stanow.: {at_stand}, Oczek.start: {waiting_dep}")
     
     # Pokazanie końcowego stanu
     viz.show_static()

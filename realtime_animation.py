@@ -16,7 +16,7 @@ def run_realtime_animation():
     print("🎬 Uruchamianie animacji symulacji lotniska Balice w czasie rzeczywistym...")
     
     # Parametry symulacji
-    num_airplanes = 0
+    num_airplanes = 5
     
     print(f"Parametry:")
     print(f"- Mapa: Graf lotniska (nodes.csv, edges.csv)")
