@@ -12,15 +12,43 @@ from src.visualization import AirportVisualization
 import matplotlib.pyplot as plt
 
 
+def configure_airport(model: "AirportModel"):
+    """
+    Konfiguracja jednokierunkowości i segmentów kolejki w oparciu o dane grafu.
+    W tym miejscu można ustawić:
+    - krawędzie jednokierunkowe (model.graph.set_one_way / set_bidirectional),
+    - pojemności segmentów kolejki (model.graph.set_edge_capacity),
+    - limity prędkości (model.graph.set_edge_speed_limits),
+    - punkty konfliktu (model.graph.add_conflict_point).
+    Domyślnie nic nie zmieniamy (mapa może już zawierać te informacje).
+    """
+    # Przykład (zakomentowane – brak wiedzy o konkretnych ID z CSV):
+    # model.graph.set_one_way(12, 15, 'AB')
+    # model.graph.set_edge_capacity(21, 22, capacity=3)  # np. segment kolejki
+    # model.graph.add_conflict_point(1, description="Crossing RWY", edges=[(30,31), (40,41)])
+    return
+
+def scenarios_smoke_tests(model: "AirportModel"):
+    """
+    Proste scenariusze dymne do ręcznego uruchomienia:
+    1) Pushback lock – tylko jeden samolot jednocześnie.
+    2) Kolejka: pojemność segmentu (jeśli skonfigurowana).
+    3) Pas: blokada podczas operacji.
+    """
+    print("▶ Scenariusze dymne (manualne):")
+    print("- Pushback lock: użyj state 'at_stand' >=2 i obserwuj 'pushback_pending'/'pushback'")
+    print("- Kolejki: ustaw capacity na segmencie 'queue' i obserwuj równoległe zajęcia")
+    print("- Pas: obserwuj blokadę w statystykach wizualizacji")
+
 def main():
     """Główna funkcja uruchamiająca symulację"""
     print("🛫 Uruchamianie symulacji lotniska Balice...")
     print("=" * 50)
     
     # Parametry symulacji
-    num_arriving_airplanes = 4  # Początkowa liczba samolotów przybywających
+    num_arriving_airplanes = 3  # Początkowa liczba samolotów przybywających
     wind_direction = "07"  # Kierunek wiatru: "07" lub "25"
-    arrival_rate = 0.01  # Prawdopodobieństwo pojawienia się nowego samolotu
+    arrival_rate = 0.00  # Prawdopodobieństwo pojawienia się nowego samolotu
     
     print(f"Parametry symulacji:")
     print(f"- Mapa: Graf lotniska (nodes.csv, edges.csv)")
@@ -39,6 +67,9 @@ def main():
     # Tworzenie wizualizacji
     viz = AirportVisualization(model)
 
+    # Konfiguracja lotniska (jednokierunkowość, pojemności, konflikty)
+    configure_airport(model)
+
     print("Wybierz tryb uruchomienia:")
     print("1. Animacja interaktywna")
     print("2. Statyczny obraz")
@@ -50,7 +81,7 @@ def main():
     if choice == "1":
         print("Uruchamianie animacji interaktywnej...")
         print("Zamknij okno aby zakończyć.")
-        anim = viz.animate(frames=1000, interval=100)
+        anim = viz.animate(frames=1000, interval=500)
         plt.show()
         
     elif choice == "2":

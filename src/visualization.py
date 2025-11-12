@@ -129,6 +129,25 @@ class AirportVisualization:
                 
                 self.ax.plot([from_node[0], to_node[0]], [from_node[1], to_node[1]], 
                            color=color, alpha=0.8, linewidth=linewidth)
+
+                # Strzałki jednokierunkowości
+                one_way = edge[2].get('one_way', False)
+                if one_way:
+                    allowed = edge[2].get('allowed_dir', 'AB')
+                    if allowed in ('AB', 'BA'):
+                        # Punkt strzałki w 60% długości krawędzi
+                        if allowed == 'AB':
+                            x0, y0 = from_node
+                            x1, y1 = to_node
+                        else:
+                            x0, y0 = to_node
+                            x1, y1 = from_node
+                        xm = x0 + 0.6 * (x1 - x0)
+                        ym = y0 + 0.6 * (y1 - y0)
+                        dx = (x1 - x0)
+                        dy = (y1 - y0)
+                        self.ax.arrow(xm, ym, dx*0.001, dy*0.001,
+                                      head_width=0.6, head_length=0.8, fc=color, ec=color, alpha=0.9, length_includes_head=True, zorder=4)
         
         # Rysowanie węzłów
         for node_id, data in self.model.graph.graph.nodes(data=True):
@@ -247,8 +266,7 @@ class AirportVisualization:
         info_text += f"Oczek. na start: {waiting_dep}\n"
         info_text += f"Startujące: {departing}\n\n"
         info_text += f"Pas: {'ZAJĘTY' if self.model.runway_controller.is_busy else 'WOLNY'}\n"
-        info_text += f"Kolejka lądow.: {self.model.runway_controller.get_landing_queue_length()}\n"
-        info_text += f"Kolejka startów: {self.model.runway_controller.get_departure_queue_length()}"
+        info_text += f"Kolejka pasa: {self.model.runway_controller.get_runway_queue_length()}"
         
         #self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
         #            fontsize=10, verticalalignment='bottom',

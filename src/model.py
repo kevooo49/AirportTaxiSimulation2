@@ -5,6 +5,21 @@ from src.segment_manager import SegmentManager
 from mesa import Model
 import os
 
+DEFAULTS = {
+    'taxi_speed_straight_kts': 20,
+    'taxi_speed_turn_kts': 10,
+    'min_headway_m': 100,
+    'pushback_time_s': 90,
+    'runway_lineup_block_s': 20,
+    'takeoff_roll_time_s': 35,
+    'landing_roll_time_s': 40,
+    'runway_buffer_after_exit_s': 15,
+    'sep_TT_s': 60,
+    'sep_LL_s': 70,
+    'sep_TL_s': 90,
+    'sep_LT_s': 90,
+}
+
 class AirportModel(Model):
     def __init__(self, num_arriving_airplanes=5, wind_direction="07", 
                  arrival_rate=0.1, nodes_file="nodes.csv", edges_file="edges.csv"):
@@ -21,12 +36,13 @@ class AirportModel(Model):
         self.num_arriving_airplanes = num_arriving_airplanes
         self.arrival_rate = arrival_rate  # Prawdopodobieństwo pojawienia się nowego samolotu
         self.wind_direction = wind_direction  # Kierunek wiatru "07" lub "25"
-        
-        # Runway controller z kierunkiem wiatru
-        self.runway_controller = RunwayController(self, 1, wind_direction=wind_direction)
+        self.defaults = DEFAULTS
         
         # Segment manager do zarządzania rezerwacjami
         self.segment_manager = SegmentManager(self)  # Przekaż referencję do modelu
+
+        # Runway controller z kierunkiem wiatru
+        self.runway_controller = RunwayController(self, 1, wind_direction=wind_direction)
 
         # Lista samolotów w symulacji
         self.airplanes = []
@@ -44,8 +60,6 @@ class AirportModel(Model):
             airplane = Airplane(self, self.next_airplane_id, airplane_type="arrival")
             # Samoloty przybywające nie mają jeszcze pozycji (są w powietrzu)
             airplane.current_node = None
-            # Ustaw priorytet samolotu w segment managerze
-            self.segment_manager.set_airplane_priority(self.next_airplane_id, airplane.priority)
             self.airplanes.append(airplane)
             self.next_airplane_id += 1
     
@@ -54,10 +68,41 @@ class AirportModel(Model):
         if self.random.random() < self.arrival_rate:
             airplane = Airplane(self, self.next_airplane_id, airplane_type="arrival")
             airplane.current_node = None
-            # Ustaw priorytet samolotu w segment managerze
-            self.segment_manager.set_airplane_priority(self.next_airplane_id, airplane.priority)
             self.airplanes.append(airplane)
             self.next_airplane_id += 1
+
+    def log_airplanes_status(self):
+        """Loguje stan wszystkich samolotów"""
+        print(f"\n{'='*80}")
+        print(f"KROK {self.step_count} - Stan samolotów")
+        print(f"{'='*80}")
+        print(f"Liczba samolotów: {len(self.airplanes)}")
+        print(f"Kolejka pasa: {self.runway_controller.get_runway_queue_length()}")
+        print(f"Pas zajęty: {'TAK' if self.runway_controller.is_busy else 'NIE'}")
+        if self.runway_controller.current_airplane:
+            print(f"Aktualna operacja: {self.runway_controller.current_operation} - Samolot {self.runway_controller.current_airplane.unique_id}")
+        
+        # Statystyki stanów
+        states_count = {}
+        for airplane in self.airplanes:
+            state = airplane.state
+            states_count[state] = states_count.get(state, 0) + 1
+        print(f"Stany: {', '.join([f'{k}: {v}' for k, v in sorted(states_count.items())])}")
+        
+        print(f"\n{'ID':<6} {'Typ':<10} {'Stan':<20} {'Węzeł':<8} {'Cel':<8} {'Ścieżka':<8} {'Blokady':<8} {'Kolejka':<8} {'Czeka':<8}")
+        print(f"{'-'*80}")
+        
+        for airplane in sorted(self.airplanes, key=lambda a: a.unique_id):
+            node_str = str(airplane.current_node) if airplane.current_node is not None else "None"
+            target_str = str(airplane.target_node) if airplane.target_node is not None else "None"
+            path_len = len(airplane.path) if airplane.path else 0
+            blocked_count = len(airplane.blocked_edges) if hasattr(airplane, 'blocked_edges') else 0
+            in_queue = "TAK" if airplane.is_in_queue else "NIE"
+            wait_time = airplane.wait_time if hasattr(airplane, 'wait_time') else 0
+            
+            print(f"{airplane.unique_id:<6} {airplane.airplane_type:<10} {airplane.state:<20} {node_str:<8} {target_str:<8} {path_len:<8} {blocked_count:<8} {in_queue:<8} {wait_time:<8}")
+        
+        print(f"{'='*80}\n")
 
     def step(self):
         """Krok symulacji"""
@@ -73,13 +118,12 @@ class AirportModel(Model):
         # Najpierw runway controller
         self.runway_controller.step()
         
-        # Przetwórz propozycje konfliktów dla wszystkich samolotów
-        for airplane in self.airplanes:
-            airplane.process_conflict_proposals()
-        
         # Potem wszystkie samoloty (kopiujemy listę, bo może się zmienić)
         for airplane in self.airplanes[:]:
             airplane.step()
+        
+        # Loguj stan wszystkich samolotów
+        self.log_airplanes_status()
 
 
     def portray_cell(cell_type):

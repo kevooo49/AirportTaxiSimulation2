@@ -1,17 +1,16 @@
-from,to,type,length,bidirectional
-8,10,runway,18.0,True
-1,8,runway,23.0,True
-2,10,runway,23.0,True
-5,1,runway_entry,7.0,False
-2,11,runway_entry,7.0,False
-10,9,runway_exit,7.0,False
-8,7,runway_exit,7.0,False
-11,2,taxiway,7.0,True
-11,37,taxiway,6.0,True
-37,36,taxiway,8.0,True
-36,9,taxiway,9.0,True
-7,9,taxiway,18.0,True
-5,7,taxiway,23.0,True
+from,to,type,length,bidirectional,desc
+8,10,runway,18.0,True,runway
+1,8,runway,23.0,True,runway
+2,10,runway,23.0,True,runway
+5,1,runway_entry,7.0,False,Taxiway F
+2,11,runway_entry,7.0,False,Taxiway A
+10,9,runway_exit,7.0,False,Taxiway C
+8,7,runway_exit,7.0,False,Taxiway D
+11,37,taxiway,6.0,True,Taxiway B
+37,36,taxiway,8.0,True,Taxiway B
+36,9,taxiway,9.0,True,Taxiway B
+7,9,taxiway,18.0,True,Taxiway B
+5,7,taxiway,23.0,True,Taxiway B
 29,36,apron_link,5.656854249492381,True
 29,37,apron_link,5.656854249492381,True
 29,38,apron_link,6.0,True
@@ -27,18 +26,18 @@ from,to,type,length,bidirectional
 45,46,apron_link,1.0,True
 46,47,apron_link,1.0,True
 38,13,stand_link,1.0,True
-39,14,stand_link,1.0,True
-39,28,stand_link,1.0,True
-40,27,stand_link,1.0,True
-40,15,stand_link,1.0,True
-41,26,stand_link,1.0,True
-42,16,stand_link,1.0,True
-42,25,stand_link,1.0,True
-31,17,stand_link,1.0,True
-31,18,stand_link,1.4142135623730951,True
-31,19,stand_link,1.0,True
-43,20,stand_link,1.0,True
-44,21,stand_link,1.0,True
-45,24,stand_link,1.0,True
-46,23,stand_link,1.0,True
-47,22,stand_link,1.0,True
+39,14,stand_link,1.0,True,Stand A
+39,28,stand_link,1.0,True,Stand B
+40,27,stand_link,1.0,True,Stand C
+40,15,stand_link,1.0,True,Stand D
+41,26,stand_link,1.0,True,Stand E
+42,16,stand_link,1.0,True,Stand F
+42,25,stand_link,1.0,True,Stand G
+31,17,stand_link,1.0,True,Stand H
+31,18,stand_link,1.4142135623730951,True,Stand I
+31,19,stand_link,1.0,True,Stand J
+43,20,stand_link,1.0,True,Stand K
+44,21,stand_link,1.0,True,Stand L
+45,24,stand_link,1.0,True,Stand M
+46,23,stand_link,1.0,True,Stand N
+47,22,stand_link,1.0,True,Stand O
