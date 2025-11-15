@@ -49,6 +49,11 @@ class Airplane(Agent):
         self.departure_hold_node: Optional[int] = None
         
     def step(self):
+        print(f"Airplane {self.unique_id} state: {self.state}")
+        print(f"  Current node: {self.current_node}, Target node: {self.target_node}, Path: {self.path}")
+        print(f"  Position: ({self.position.x:.2f}, {self.position.y:.2f}), Is moving: {self.is_moving}")
+        print(f" Progress: {self.position.progress:.2f}, Movement start: {self.movement_start_time}, Duration: {self.movement_duration}")
+        print(f" SDAS {self.model.segment_manager.get_edge_status(9,10)}")
         """Główna logika samolotu na płycie lotniska"""
         if self.state == "waiting_landing":
             self.wait_for_landing()
@@ -94,37 +99,36 @@ class Airplane(Agent):
         success, blocked_edges = self.model.segment_manager.request_airport_section("taxiway_outbound", self.unique_id)         
         if success:
             self.target_node = blocked_edges[0]['to']
-            self.path = self.model.graph.find_shortest_path(self.model.runway_controller.get_runway_entry_node(), blocked_edges[0]['to'])
+            self.path = self.model.graph.find_shortest_path(self.model.runway_controller.get_active_runway(), blocked_edges[0]['to'])
+
             if len(self.path) > 1:
                 self.path.pop(0)
             return True
         else:
             self.model.segment_manager.release_edges(blocked_edges, self.unique_id)
-            self.blocked_edges = []
             return False
 
     def taxi_to_exit(self):
         """Taxi do wyjścia z pasa startowego"""
         self._move_along_path()
         if self.current_node == self.target_node:
-            self.model.segment_manager.release_edges(self.blocked_edges, self.unique_id)
-            self.blocked_edges = []
             self.state = "at_exit"
             self.target_node = None
             self.path = []
     
     def wait_for_stand(self):
         """Oczekiwanie na wolne stanowisko postojowe"""
-        success_taxiway, blocked_edges_taxiway = self.model.segment_manager.request_airport_section("taxiway", self.unique_id)
-        success_apron, blocked_edges_apron = self.model.segment_manager.request_airport_section("apron", self.unique_id)
-        if success_taxiway and success_apron and self.choose_stand():
-            blocked_edges = blocked_edges_taxiway + blocked_edges_apron
-            self.blocked_edges = blocked_edges
+        before_blocked_edges = self.blocked_edges.copy()
+        success_airport, blocked_edges_taxiway = self.model.segment_manager.request_airport_section("airport_deck", self.unique_id)
+        print("WAIT FOR STAND")
+        print(f"Airplane {self.unique_id} requesting stand:")
+        print(success_airport)
+        if success_airport and self.choose_stand():
+            self.model.segment_manager.release_edges(before_blocked_edges, self.unique_id)
+            self.blocked_edges = blocked_edges_taxiway
             self.state = "taxiing_to_stand"
         else:
             self.model.segment_manager.release_edges(blocked_edges_taxiway, self.unique_id)
-            self.model.segment_manager.release_edges(blocked_edges_apron, self.unique_id)
-            self.blocked_edges = []
             return
 
     
@@ -157,6 +161,7 @@ class Airplane(Agent):
         # Sprawdź czy dotarł do stanowiska
         if self.current_node == self.target_node:
             self.model.segment_manager.release_edges(self.blocked_edges, self.unique_id)
+            self.model.segment_manager.remove_airplane_from_airport_queue(self.unique_id)
             self.blocked_edges = []
             self.state = "at_stand"
             self.stand_time = 0
@@ -176,18 +181,16 @@ class Airplane(Agent):
     def handle_pushback_pending(self):
         """Czeka na dostępność tuga/apron i rozpoczyna pushback."""
         now = self.model.step_count
-        granted_apron, blocked_edges_apron = self.model.segment_manager.request_airport_section("apron", self.unique_id)
-        granted_taxiway, blocked_edges_taxiway = self.model.segment_manager.request_airport_section("taxiway", self.unique_id)
+        granted_airport, blocked_edges_airport = self.model.segment_manager.request_airport_section("airport_deck", self.unique_id)
         granted_runway_entry,blocked_edges_runway_entry = self.choose_runway_entry()
-        if granted_apron and granted_taxiway and granted_runway_entry:
-            blocked_edges = blocked_edges_apron + blocked_edges_taxiway + blocked_edges_runway_entry
+        if granted_airport and granted_runway_entry:
+            blocked_edges = blocked_edges_airport + blocked_edges_runway_entry
             self.blocked_edges = blocked_edges
             self.state = "pushback"
             self.airplane_type = "departure"
             self.pushback_started_at = now
         else:
-            self.model.segment_manager.release_edges(blocked_edges_apron, self.unique_id)
-            self.model.segment_manager.release_edges(blocked_edges_taxiway, self.unique_id)
+            self.model.segment_manager.release_edges(blocked_edges_airport, self.unique_id)
             self.model.segment_manager.release_edges(blocked_edges_runway_entry, self.unique_id)
             self.blocked_edges = []
     
@@ -219,6 +222,7 @@ class Airplane(Agent):
         if self.current_node == self.target_node:
             self.model.segment_manager.release_edges(self.blocked_edges, self.unique_id)
             self.blocked_edges = []
+            self.model.segment_manager.remove_airplane_from_airport_queue(self.unique_id)
             self.state = "waiting_departure"
             self.target_node = None
             self.path = []
@@ -331,26 +335,43 @@ class Airplane(Agent):
         
         target = self.position.target_node
         if target is not None:
-            node_busy = not self.model.segment_manager.request_node(target, self.unique_id)
             
-            if node_busy:
-                if self.hold_progress_limit is None:
-                    self.hold_progress_limit = 0.85
+            status = self.model.segment_manager.get_edge_status(self.position.current_node,target)
+            
+            occupants = status["airplanes"]
 
+
+            if status["occupied"] and self.model.segment_manager._edge_capacity(self.position.current_node,target) >= len(occupants):
+
+                self.model.segment_manager.release_edges([x for x in self.blocked_edges if not(x["from"] == self.position.current_node and x["to"] == target)],self.unique_id)
+
+                blocked_edges = [{'from':self.position.current_node,'to':target}]
+                self.blocked_edges = blocked_edges
+
+                try:
+                    pos = occupants.index(self.unique_id)
+                except ValueError:
+                    pos = 0
+                self.hold_progress_limit = max(0.0,1 - 0.19 * pos)
                 if self.position.progress >= self.hold_progress_limit:
                     return
-            else:
-                if self.hold_progress_limit is not None:
-                    self.hold_progress_limit = None
+
+                
 
         # Oblicz postęp ruchu
         elapsed_time = self.model.step_count - self.movement_start_time
+        
         progress = min(1.0, elapsed_time / self.movement_duration)
+        progress = max(0.0, progress)
+
+        if progress >= self.hold_progress_limit if self.hold_progress_limit is not None else False:
+            progress = self.hold_progress_limit
         
         # Interpoluj pozycję
         start_pos = self.model.graph.get_node_position(self.position.current_node)
         target_pos = self.model.graph.get_node_position(self.position.target_node)
-        
+
+
         if start_pos and target_pos:
             self.position.x, self.position.y = self.movement_controller.interpolate_position(
                 start_pos, target_pos, progress
@@ -364,19 +385,10 @@ class Airplane(Agent):
     def _finish_movement(self):
         """Kończy ruch i aktualizuje pozycję"""
         if self.position.target_node:
-            # Zwolnij krawędź i poprzedni węzeł po zakończeniu ruchu
-            prev_node = self.current_node
-            finished_target = self.position.target_node
             self.current_node = self.position.target_node
             target_pos = self.model.graph.get_node_position(self.position.target_node)
             if target_pos:
-                self.position.x, self.position.y = target_pos
-            if prev_node is not None:
-                # Zwolnij krawędź
-                self.model.segment_manager.release_edge(prev_node, finished_target, self.unique_id)
-                # Zwolnij poprzedni węzeł (teraz jesteśmy już w docelowym)
-                self.model.segment_manager.release_node(prev_node, self.unique_id)
-        
+                self.position.x, self.position.y = target_pos        
         self.is_moving = False
         self.position.progress = 0.0
         self.position.current_node = self.current_node
@@ -392,32 +404,6 @@ class Airplane(Agent):
     def get_position(self):
         """Zwraca pozycję samolotu z interpolacją + wizualna kolejka przy entry/exit."""
         x, y = self.position.x, self.position.y
-
-        if self.current_node is not None:
-            same_node_planes = [
-                a for a in self.model.airplanes
-                if a is not self and a.current_node == self.current_node
-            ]
-
-            if same_node_planes:
-                all_planes = sorted(same_node_planes + [self], key=lambda a: a.unique_id)
-                idx = all_planes.index(self)
-
-                direction = 0
-                try:
-                    G = self.model.graph.graph
-                    neighbors = G[self.current_node]
-                    has_exit = any(data.get("type") == "runway_exit" for _, data in neighbors.items())
-                    has_entry = any(data.get("type") == "runway_entry" for _, data in neighbors.items())
-                    if has_exit:
-                        direction = 1
-                    elif has_entry:
-                        direction = -1
-                except Exception:
-                    direction = 0
-
-                offset = 0.8
-                y += direction * idx * offset
 
         return (x, y)
 

@@ -47,15 +47,15 @@ class RunwayController(Agent):
             print(f"Samolot {airplane.unique_id} w kolejce na pasie startowym")
             print(f"Samolot {airplane.airplane_type}")
             if airplane.airplane_type == "arrival":
-                if airplane.choose_exit():
-                    granted,blocked_edges = self.model.segment_manager.request_airport_section("runway", airplane.unique_id)
-                    if granted:
+                granted,blocked_edges = self.model.segment_manager.request_airport_section("runway", airplane.unique_id)
+                if granted:
+                    if airplane.choose_exit():
                         airplane.blocked_edges = blocked_edges
                         airplane = self.runway_queue.pop(0)
                         self._start_operation(airplane)
                         return
-                    else:
-                        self.model.segment_manager.release_edges(blocked_edges, airplane.unique_id)
+                else:
+                    self.model.segment_manager.release_edges(blocked_edges, airplane.unique_id)
                         
             elif airplane.airplane_type == "departure":
                 granted,blocked_edges = self.model.segment_manager.request_airport_section("runway", airplane.unique_id)

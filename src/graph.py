@@ -99,7 +99,7 @@ class AirportGraph:
         if node_id in self.graph.nodes:
             return self.graph.nodes[node_id]
         return None
-
+    
     def get_edges_by_type(self, edge_type: str) -> List[Dict]:
         """Pobiera krawędzie po typie"""
         edges = []

@@ -107,13 +107,11 @@ class AirportModel(Model):
     def step(self):
         """Krok symulacji"""
         self.step_count += 1
-        
+        print(self.segment_manager.airport_queue)
         # Czasami spawuj nowe samoloty
         self.spawn_new_arrival()
-        
         # Wyczyść stare rezerwacje
         self.segment_manager.cleanup_old_reservations(self.step_count)
-        
         # Krok dla wszystkich agentów
         # Najpierw runway controller
         self.runway_controller.step()
@@ -123,7 +121,7 @@ class AirportModel(Model):
             airplane.step()
         
         # Loguj stan wszystkich samolotów
-        self.log_airplanes_status()
+        #self.log_airplanes_status()
 
 
     def portray_cell(cell_type):

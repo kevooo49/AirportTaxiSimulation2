@@ -46,8 +46,8 @@ def main():
     print("=" * 50)
     
     # Parametry symulacji
-    num_arriving_airplanes = 3  # Początkowa liczba samolotów przybywających
-    wind_direction = "07"  # Kierunek wiatru: "07" lub "25"
+    num_arriving_airplanes = 6 # Początkowa liczba samolotów przybywających
+    wind_direction = "25"  # Kierunek wiatru: "07" lub "25"
     arrival_rate = 0.00  # Prawdopodobieństwo pojawienia się nowego samolotu
     
     print(f"Parametry symulacji:")
@@ -81,7 +81,7 @@ def main():
     if choice == "1":
         print("Uruchamianie animacji interaktywnej...")
         print("Zamknij okno aby zakończyć.")
-        anim = viz.animate(frames=1000, interval=500)
+        anim = viz.animate(frames=1000, interval=100)
         plt.show()
         
     elif choice == "2":

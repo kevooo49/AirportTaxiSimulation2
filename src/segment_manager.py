@@ -1,8 +1,11 @@
 import time
+import inspect
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
+from collections import deque
+
 
 
 
@@ -30,7 +33,9 @@ class AtcController:
         self.last_takeoff_time: int = -10**9
         self.last_landing_time: int = -10**9
         self.runway_lock_until: int = 0
-        self.last_op: str = ""  # "T" albo "L"
+        self.last_op: str = ""  # "T" albo "L" 
+        
+
 
     def can_line_up(self, now: int) -> bool:
         return now >= self.runway_lock_until
@@ -100,14 +105,14 @@ class SegmentManager:
     def __init__(self, model=None):
         self.model = model
         # Rezerwacje krawędzi: (u,v) -> lista ID samolotów zajmujących segment
-        self.edge_reservations: Dict[Tuple[int, int], List[int]] = {}
+        self.edge_reservations: Dict[Tuple[int, int], deque[int]] = {}
         # Rezerwacje węzłów: node_id -> ID samolotu (pojemność = 1)
         self.node_reservations: Dict[int, int] = {}
         # Prosty lock pushbacku (1 tug)
         self.pushback_lock_until: int = 0
         self.pushback_active_aircraft: Optional[int] = None
         self.default_pushback_time: int = 3  # liczba ticków pushbacku (prosty model)
-
+        self.airport_queue: deque[int] = deque()
     # ------------------------------------------------------------------
     # Pomocnicze
     # ------------------------------------------------------------------
@@ -118,7 +123,9 @@ class SegmentManager:
                 return capacity
             # Jeśli to runway – domyślnie 1
             edge_type = self.model.graph.graph[u][v].get("type")
-            if edge_type == "runway":
+            if ["runway_entry", "runway_exit"].__contains__(edge_type):
+                return 5
+            else:
                 return 1
         return 1
 
@@ -142,23 +149,31 @@ class SegmentManager:
     # ------------------------------------------------------------------
     def request_edge(self, u: int, v: int, airplane_id: int) -> bool:
         key = _edge_key(u, v)
-        slots = self.edge_reservations.setdefault(key, [])
-        if airplane_id in slots:
+        q: deque = self.edge_reservations.setdefault(key, deque())            
+        if airplane_id in q:
             return True
         capacity = self._edge_capacity(u, v)
-        if len(slots) < capacity:
-            slots.append(airplane_id)
+        if len(q) < capacity:
+            q.append(airplane_id)
             return True
         return False
 
     def release_edge(self, u: int, v: int, airplane_id: int):
         key = _edge_key(u, v)
-        if key in self.edge_reservations and airplane_id in self.edge_reservations[key]:
-            self.edge_reservations[key].remove(airplane_id)
-            if not self.edge_reservations[key]:
-                del self.edge_reservations[key]
+        q: deque = self.edge_reservations.get(key)
+        print(f"release_edge {u} {v}: {airplane_id} -> {list(q) if q else 'None'}")
 
 
+        if key in self.edge_reservations and q:
+            try:
+                q.remove(airplane_id)
+                print(f"release_edge: after remove -> {list(q)}")
+                if not self.edge_reservations[key]:
+                    del self.edge_reservations[key]
+                    print(f"release_edge: queue empty, key removed")
+            except ValueError:
+                print(f"release_edge: airplane {airplane_id} not in queue {key}")
+                pass
     # ------------------------------------------------------------------
     # Rezerwacje sekcji lotniska 
     # ------------------------------------------------------------------
@@ -187,23 +202,25 @@ class SegmentManager:
                         success = True
                         blocked_edges.append(edge)
                         break
-            case "taxiway":
-                for edge in self.model.graph.get_edges_by_type("taxiway"):
-                    if not self.request_edge(edge['from'], edge['to'], airplane_id):
-                        success = False
-                        break
-                    else:
-                        blocked_edges.append(edge)
-            case "apron":
-                edges = self.model.graph.get_edges_by_type("apron_link")
-                edges.extend(self.model.graph.get_edges_by_type("stand_link"))
-                for edge in edges:
-                    if not self.request_edge(edge['from'], edge['to'], airplane_id):
-                        success = False
-                        return False, blocked_edges
-                    else:
-                        blocked_edges.append(edge)
-                return success, blocked_edges
+            case "airport_deck":
+                if airplane_id not in self.airport_queue:
+                    self.airport_queue.append(airplane_id)
+                print(f"Airport queue: {list(self.airport_queue)} index of {airplane_id}: {self.airport_queue.index(airplane_id)}")
+                if self.airport_queue.index(airplane_id) == 0:
+                    edges = self.model.graph.get_edges_by_type("apron_link")
+                    edges.extend(self.model.graph.get_edges_by_type("stand_link"))
+                    edges.extend(self.model.graph.get_edges_by_type("taxiway"))
+                    for edge in edges:
+                        if not self.request_edge(edge['from'], edge['to'], airplane_id):
+                            self.apron_queue.append(airplane_id)
+                            success = False
+                            return False, blocked_edges
+                        else:
+                            blocked_edges.append(edge)
+                    return success, blocked_edges
+                return False, blocked_edges
+                
+                
             case _:
                 return False, blocked_edges
 
@@ -217,13 +234,19 @@ class SegmentManager:
         for edge in edges:
             self.release_edge(edge['from'], edge['to'], airplane_id)
         return True
+    
+    def remove_airplane_from_airport_queue(self, airplane_id: int):
+        if airplane_id in self.airport_queue:
+            self.airport_queue.remove(airplane_id)
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # Informacje
     # ------------------------------------------------------------------
     def get_edge_status(self, u: int, v: int) -> Dict[str, Optional[List[int]]]:
         key = _edge_key(u, v)
-        occupants = self.edge_reservations.get(key, [])
+        occupants = self.edge_reservations.get(key, deque())
         return {
             "occupied": len(occupants) > 0,
             "airplanes": occupants.copy()
